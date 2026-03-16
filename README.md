@@ -59,15 +59,20 @@ cargo build --release
 
 ### Windows
 
-Build from within a WSL2 terminal (not from a Windows shell like MINGW64). `protoc.exe` cannot access WSL filesystem paths via UNC (`\\wsl.localhost\...`), so running `cargo build` from native Windows against WSL source will fail.
+Native Windows builds are supported.
 
-From inside WSL:
+Install dependencies and build from a Windows terminal (PowerShell or `cmd.exe`) in the repository root:
 
 ```bash
-sudo apt install libudev-dev libusb-1.0-0-dev protobuf-compiler libengine-pkcs11-openssl
 cargo build --release
-# Output: target/release/libtrezor_pkcs11.so  (usable from WSL)
+# Output: target/release/trezor_pkcs11.dll
 ```
+
+Recommended setup:
+
+- Install Rust (`rustup`) with the MSVC toolchain.
+- Install Protocol Buffers (`protoc`) and ensure it is on `PATH`.
+- Use a native Windows checkout path (for example under `C:\dev\...`) for the smoothest build experience.
 
 ## Configuration
 
