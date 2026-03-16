@@ -7,6 +7,9 @@
 //!   3. /etc/trezor-pkcs11.conf
 //!   Windows:
 //!   2. %APPDATA%\trezor-pkcs11\config
+//!   3. %LOCALAPPDATA%\trezor-pkcs11\config
+//!   4. %USERPROFILE%\.config\trezor-pkcs11\config
+//!   5. C:\ProgramData\trezor-pkcs11\config
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -69,37 +72,76 @@ pub fn load() -> Vec<SlotConfig> {
 
 fn config_path() -> PathBuf {
     if let Ok(p) = std::env::var("TREZOR_PKCS11_CONF") {
-        return PathBuf::from(p);
+        if !p.trim().is_empty() {
+            return PathBuf::from(p);
+        }
     }
-    if let Some(mut p) = user_config_dir() {
-        p.push("trezor-pkcs11");
-        p.push("config");
+
+    for p in config_candidates() {
         if p.exists() {
             return p;
         }
     }
+
     #[cfg(windows)]
     { PathBuf::from(r"C:\ProgramData\trezor-pkcs11\config") }
     #[cfg(not(windows))]
     { PathBuf::from("/etc/trezor-pkcs11.conf") }
 }
 
-fn user_config_dir() -> Option<PathBuf> {
+fn config_candidates() -> Vec<PathBuf> {
     #[cfg(windows)]
     {
-        // %APPDATA%\trezor-pkcs11\config
-        std::env::var("APPDATA").ok().map(PathBuf::from)
+        let mut out = Vec::new();
+
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            if !appdata.trim().is_empty() {
+                let mut p = PathBuf::from(appdata);
+                p.push("trezor-pkcs11");
+                p.push("config");
+                out.push(p);
+            }
+        }
+
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            if !local.trim().is_empty() {
+                let mut p = PathBuf::from(local);
+                p.push("trezor-pkcs11");
+                p.push("config");
+                out.push(p);
+            }
+        }
+
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            if !user_profile.trim().is_empty() {
+                let mut p = PathBuf::from(user_profile);
+                p.push(".config");
+                p.push("trezor-pkcs11");
+                p.push("config");
+                out.push(p);
+            }
+        }
+
+        out
     }
     #[cfg(not(windows))]
     {
         // $XDG_CONFIG_HOME or ~/.config
         if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-            return Some(PathBuf::from(xdg));
+            let mut p = PathBuf::from(xdg);
+            p.push("trezor-pkcs11");
+            p.push("config");
+            return vec![p];
         }
-        std::env::var("HOME").ok().map(|h| {
+
+        if let Ok(h) = std::env::var("HOME") {
             let mut p = PathBuf::from(h);
             p.push(".config");
-            p
-        })
+            p.push("trezor-pkcs11");
+            p.push("config");
+            return vec![p];
+        }
+
+        Vec::new()
     }
 }

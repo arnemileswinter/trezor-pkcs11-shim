@@ -74,9 +74,13 @@ The library reads a TOML config file to know which PKCS#11 slots to expose and w
 **Search order:**
 
 1. `$TREZOR_PKCS11_CONF` (environment variable, full path)
-2. `$XDG_CONFIG_HOME/trezor-pkcs11/config`
-3. `~/.config/trezor-pkcs11/config`
-4. `/etc/trezor-pkcs11.conf`
+2. Linux: `$XDG_CONFIG_HOME/trezor-pkcs11/config`
+3. Linux: `~/.config/trezor-pkcs11/config`
+4. Windows: `%APPDATA%\trezor-pkcs11\config`
+5. Windows: `%LOCALAPPDATA%\trezor-pkcs11\config`
+6. Windows: `%USERPROFILE%\.config\trezor-pkcs11\config`
+7. Windows fallback: `C:\ProgramData\trezor-pkcs11\config`
+8. Linux fallback: `/etc/trezor-pkcs11.conf`
 
 **Example config** (`~/.config/trezor-pkcs11/config`):
 
