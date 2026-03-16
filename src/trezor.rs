@@ -20,6 +20,7 @@ use hidapi::{HidApi, HidDevice};
 use prost::Message;
 use rusb::UsbContext as _;
 use sha2::{Digest, Sha256};
+use std::sync::Mutex;
 use std::time::Duration;
 
 // Trezor USB identifiers
@@ -42,6 +43,12 @@ const MSG_PASSPHRASE_REQUEST: u16 = 41;
 const MSG_PASSPHRASE_ACK:   u16 = 42;
 const MSG_SIGN_IDENTITY:    u16 = 53;
 const MSG_SIGNED_IDENTITY:  u16 = 54;
+
+// OpenSSH can enumerate PKCS#11 keys in a pattern that triggers overlapping
+// provider calls. The Trezor transport is effectively single-device/single-
+// session, so serialize all hardware I/O to avoid transient "Invalid session"
+// firmware failures.
+static DEVICE_IO_LOCK: Mutex<()> = Mutex::new(());
 
 // Prost-generated types from messages-crypto.proto and messages-common.proto.
 // Included from $OUT_DIR set by build.rs.
@@ -243,6 +250,20 @@ fn send_sign_identity(
     }
 }
 
+fn is_invalid_session_error(err: &TrezorError) -> bool {
+    match err {
+        TrezorError::DeviceFailure(msg) => msg.to_ascii_lowercase().contains("invalid session"),
+        _ => false,
+    }
+}
+
+fn sign_identity_once(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
+    let _io_guard = DEVICE_IO_LOCK.lock()
+        .map_err(|_| TrezorError::Protocol("device I/O lock poisoned".into()))?;
+    let dev = open_device()?;
+    send_sign_identity(&dev, req)
+}
+
 /// Sign data with a Trezor identity, hashing for ECDSA curves automatically.
 ///
 /// For ECDSA curves (nist256p1, secp256k1), `data` is SHA-256 hashed before
@@ -254,7 +275,6 @@ pub fn sign_identity(
     curve: &str,
     data: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
-    let dev = open_device()?;
     let challenge_hidden = if curve == "ed25519" {
         data.to_vec()
     } else {
@@ -266,7 +286,12 @@ pub fn sign_identity(
         challenge_visual: Some(String::new()),
         ecdsa_curve_name: Some(curve.to_string()),
     };
-    send_sign_identity(&dev, req)
+
+    match sign_identity_once(req.clone()) {
+        Ok(v) => Ok(v),
+        Err(e) if is_invalid_session_error(&e) => sign_identity_once(req),
+        Err(e) => Err(e),
+    }
 }
 
 /// Sign with a pre-hashed 32-byte challenge sent verbatim as challenge_hidden.
@@ -279,14 +304,18 @@ pub fn sign_identity_raw(
     curve: &str,
     hash32: &[u8],
 ) -> Result<Vec<u8>, TrezorError> {
-    let dev = open_device()?;
     let req = proto::crypto::SignIdentity {
         identity:         parse_uri(uri),
         challenge_hidden: Some(hash32.to_vec()),
         challenge_visual: Some(String::new()),
         ecdsa_curve_name: Some(curve.to_string()),
     };
-    let (_pubkey, sig) = send_sign_identity(&dev, req)?;
+
+    let (_pubkey, sig) = match sign_identity_once(req.clone()) {
+        Ok(v) => v,
+        Err(e) if is_invalid_session_error(&e) => sign_identity_once(req)?,
+        Err(e) => return Err(e),
+    };
     Ok(sig)
 }
 
