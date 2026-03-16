@@ -22,10 +22,15 @@ A PKCS#11 shared library (`libtrezor_pkcs11.so` / `trezor_pkcs11.dll`) that expo
 
 ## Hardware support
 
-| Device | VID | PID | Transport |
-|--------|-----|-----|-----------|
-| Trezor Safe 3, Model T, Safe 5 | 0x1209 | 0x53c1 | USB bulk (WebUSB) |
-| Trezor One | 0x534c | 0x0001 | HID |
+| Device | VID | PID | Transport | Validation status |
+|--------|-----|-----|-----------|-------------------|
+| Trezor Safe 3 | 0x1209 | 0x53c1 | USB bulk (WebUSB) | tested by maintainer |
+| Trezor Model T | 0x1209 | 0x53c1 | USB bulk (WebUSB) | expected to work, community verification wanted |
+| Trezor Safe 5 | 0x1209 | 0x53c1 | USB bulk (WebUSB) | expected to work, community verification wanted |
+| Trezor One | 0x534c | 0x0001 | HID | expected to work, community verification wanted |
+
+Only Trezor Safe 3 has been tested by the maintainer so far.
+If you test with Model T, Safe 5, or Trezor One, please open an issue or PR with results.
 
 ## Build
 
