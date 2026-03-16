@@ -45,8 +45,10 @@ git submodule update --init --depth 1
 Install system dependencies:
 
 ```bash
-sudo apt install libudev-dev libusb-1.0-0-dev protobuf-compiler
+sudo apt install libudev-dev libusb-1.0-0-dev protobuf-compiler libengine-pkcs11-openssl
 ```
+
+`libengine-pkcs11-openssl` is required if you want to use OpenSSL with `-engine pkcs11`.
 
 Then build:
 
@@ -62,7 +64,7 @@ Build from within a WSL2 terminal (not from a Windows shell like MINGW64). `prot
 From inside WSL:
 
 ```bash
-sudo apt install libudev-dev libusb-1.0-0-dev protobuf-compiler
+sudo apt install libudev-dev libusb-1.0-0-dev protobuf-compiler libengine-pkcs11-openssl
 cargo build --release
 # Output: target/release/libtrezor_pkcs11.so  (usable from WSL)
 ```
@@ -172,6 +174,27 @@ Git supports PKCS#11 tokens via its SSH signing backend.
 Populate `~/.ssh/allowed_signers` with the output of `ssh-add -L` (prefix each line with `your@email.address `).
 
 Every signed commit will require a button press on the Trezor.
+
+## OpenSSL X.509 signing (PKCS#11 CA key)
+
+When using OpenSSL with this module, force the module path with `PKCS11_MODULE_PATH` and pass `-CAkeyform ENGINE` so the PKCS#11 URI is handled by the engine.
+
+```bash
+PKCS11_MODULE_PATH="$PWD/target/release/libtrezor_pkcs11.so" \
+openssl x509 -req \
+    -in ee.csr \
+    -engine pkcs11 \
+    -CAkeyform ENGINE \
+    -CAkey "pkcs11:token=my-token-label;type=private" \
+    -CA ca.crt \
+    -out ee.pem \
+    -days 90
+```
+
+Notes:
+- Replace `my-token-label` with your configured slot `label` from the `trezor-pkcs11` config file.
+- Use your actual CA certificate filename (for example `ca.crt`, not `ca.pem` if that file does not exist).
+- `-CAkeyform ENGINE` is important; using only `-keyform engine` can make OpenSSL try to open the PKCS#11 URI as a file.
 
 ## Packaging
 
