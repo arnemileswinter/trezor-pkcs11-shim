@@ -569,7 +569,10 @@ pub unsafe extern "C" fn C_SignInit(
     if mechanism.is_null() { return CKR_ARGUMENTS_BAD; }
     let mech = (*mechanism).mechanism;
     if mech != CKM_ECDSA && mech != CKM_ECDSA_SHA256 && mech != CKM_EDDSA { return CKR_MECHANISM_INVALID; }
-    if !handle_is_private(key) { return CKR_KEY_TYPE_INCONSISTENT; }
+    // Some OpenSSH builds pass the public key handle to C_SignInit.
+    // pubkey_handle(i) = i*2+1 (odd), privkey_handle(i) = i*2+2 (even = pubkey+1).
+    // Normalise to the corresponding private key handle.
+    let key = if handle_is_private(key) { key } else { key + 1 };
     let Ok(mut guard) = STATE.lock() else { return CKR_GENERAL_ERROR };
     let Some(state) = guard.as_mut() else { return CKR_CRYPTOKI_NOT_INITIALIZED };
     let Some(session) = state.sessions.get_mut(&handle) else { return CKR_SESSION_HANDLE_INVALID };

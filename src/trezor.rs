@@ -260,31 +260,34 @@ fn is_invalid_session_error(err: &TrezorError) -> bool {
     }
 }
 
+/// Send a SignIdentity request, retrying with an Initialize if the device
+/// reports "Invalid session" (happens on a fresh USB connection with no
+/// Trezor Suite session active).
+///
+/// Both attempts use the **same device handle and I/O lock**, so there is no
+/// window between the first failure and the retry during which another process
+/// (e.g. trezord) could reclaim the USB interface.
 fn sign_identity_once(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
-    sign_identity_once_inner(req, false)
-}
-
-fn sign_identity_once_with_init(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
-    sign_identity_once_inner(req, true)
-}
-
-fn sign_identity_once_inner(req: proto::crypto::SignIdentity, initialize: bool) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
     let _io_guard = DEVICE_IO_LOCK.lock()
         .map_err(|_| TrezorError::Protocol("device I/O lock poisoned".into()))?;
     let dev = open_device()?;
-    if initialize {
-        // Device session is stale or missing — establish a fresh one.
-        // Only done on retry to avoid disrupting an existing session (e.g.
-        // one set up by Trezor Suite) which would change passphrase context
-        // and cause the wrong keys to be derived.
-        write_message(&dev, MSG_INITIALIZE, &[])?;
-        let (msg_type, _) = read_message(&dev)?;
-        if msg_type != MSG_FEATURES {
-            return Err(TrezorError::Protocol(format!(
-                "expected Features (17) after Initialize, got {}", msg_type)));
+    match send_sign_identity(&dev, req.clone()) {
+        Ok(v) => Ok(v),
+        Err(e) if is_invalid_session_error(&e) => {
+            // Session is stale — reinitialize on the same connection.
+            // We do NOT send Initialize unconditionally, to avoid disrupting
+            // an existing Trezor Suite session (which would reset passphrase
+            // context and cause the wrong keys to be derived).
+            write_message(&dev, MSG_INITIALIZE, &[])?;
+            let (msg_type, _) = read_message(&dev)?;
+            if msg_type != MSG_FEATURES {
+                return Err(TrezorError::Protocol(format!(
+                    "expected Features (17) after Initialize, got {}", msg_type)));
+            }
+            send_sign_identity(&dev, req)
         }
+        Err(e) => Err(e),
     }
-    send_sign_identity(&dev, req)
 }
 
 /// Sign data with a Trezor identity, hashing for ECDSA curves automatically.
@@ -310,11 +313,7 @@ pub fn sign_identity(
         ecdsa_curve_name: Some(curve.to_string()),
     };
 
-    match sign_identity_once(req.clone()) {
-        Ok(v) => Ok(v),
-        Err(e) if is_invalid_session_error(&e) => sign_identity_once_with_init(req),
-        Err(e) => Err(e),
-    }
+    sign_identity_once(req)
 }
 
 /// Sign with a pre-hashed 32-byte challenge sent verbatim as challenge_hidden.
@@ -334,11 +333,7 @@ pub fn sign_identity_raw(
         ecdsa_curve_name: Some(curve.to_string()),
     };
 
-    let (_pubkey, sig) = match sign_identity_once(req.clone()) {
-        Ok(v) => v,
-        Err(e) if is_invalid_session_error(&e) => sign_identity_once_with_init(req)?,
-        Err(e) => return Err(e),
-    };
+    let (_pubkey, sig) = sign_identity_once(req)?;
     Ok(sig)
 }
 
