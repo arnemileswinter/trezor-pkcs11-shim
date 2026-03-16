@@ -1,0 +1,49 @@
+[package]
+name = "trezor-pkcs11"
+version = "0.1.0"
+edition = "2021"
+description = "PKCS#11 shim backed by a Trezor hardware wallet"
+license = "LGPL-3.0-or-later"
+
+[lib]
+name = "trezor_pkcs11"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Linux: builds hidraw.c from bundled source; requires libudev-dev at build time.
+# Windows: uses Win32 HID API automatically; no extra system deps needed.
+hidapi     = "2"
+# USB bulk transport for Trezor T/Safe 3/Safe 5 (WebUSB bridge, not HID).
+# Requires libusb-1.0-dev at build time on Linux.
+rusb       = "0.9"
+prost      = "0.13"
+sha2       = { version = "0.10", default-features = false }
+p256       = { version = "0.13", features = ["arithmetic"] }
+k256       = { version = "0.13", features = ["arithmetic"] }
+serde      = { version = "1", features = ["derive"] }
+toml       = "0.8"
+
+[build-dependencies]
+prost-build = "0.13"
+
+[package.metadata.deb]
+name             = "trezor-pkcs11"
+maintainer       = "Arne Winter <github@arnewinter.dev>"
+section          = "utils"
+priority         = "optional"
+depends          = "libudev1, libusb-1.0-0"
+maintainer-scripts = "pkg/"
+extended-description = """\
+A PKCS#11 shared library that exposes a Trezor hardware wallet as a signing
+token. Supports P-256, secp256k1, and Ed25519 keys derived on-device via
+SLIP-0013 SignIdentity. Use with ssh-add, git commit signing, OpenSSL, and
+any other PKCS#11 consumer. The private key never leaves the device."""
+assets = [
+    ["target/release/libtrezor_pkcs11.so",
+     "usr/lib/x86_64-linux-gnu/pkcs11/trezor-pkcs11.so", "644"],
+    ["pkg/trezor-pkcs11.conf.example",
+     "etc/trezor-pkcs11.conf.example", "644"],
+    ["pkg/51-trezor.rules",
+     "usr/lib/udev/rules.d/51-trezor.rules", "644"],
+]
+conf-files = ["/etc/trezor-pkcs11.conf.example"]

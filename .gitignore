@@ -1,0 +1,31 @@
+# Rust build artifacts
+/target/
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local virtual environments
+.venv/
+venv/
+
+# Coverage and profiling output
+.coverage
+.coverage.*
+htmlcov/
+*.prof
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*~

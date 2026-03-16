@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create GitHub Releases
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Linux: build .so and .deb
+  # -------------------------------------------------------------------------
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y libudev-dev libusb-1.0-0-dev protobuf-compiler
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-cargo-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build .deb package
+        run: |
+          cargo install cargo-deb --locked
+          cargo deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-so
+          path: target/release/libtrezor_pkcs11.so
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: target/debian/trezor-pkcs11_*.deb
+
+  # -------------------------------------------------------------------------
+  # Windows: build .dll and .msi
+  # WiX Toolset v3 is pre-installed on windows-latest runners.
+  # -------------------------------------------------------------------------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\.cargo\registry
+            ~\.cargo\git
+          key: windows-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build .msi installer
+        run: |
+          cargo install cargo-wix --locked
+          cargo wix --no-build --nocapture
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-dll
+          path: target\release\trezor_pkcs11.dll
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: target\wix\trezor-pkcs11-*.msi
+
+  # -------------------------------------------------------------------------
+  # Release: collect all artifacts and publish a GitHub Release.
+  # Only runs when triggered by a version tag push.
+  # -------------------------------------------------------------------------
+  release:
+    needs: [linux, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux-so/libtrezor_pkcs11.so
+            artifacts/linux-deb/trezor-pkcs11_*.deb
+            artifacts/windows-dll/trezor_pkcs11.dll
+            artifacts/windows-msi/trezor-pkcs11-*.msi
+          generate_release_notes: true

@@ -1,0 +1,4 @@
+[submodule "vendor/trezor-firmware"]
+	path = vendor/trezor-firmware
+	url = https://github.com/trezor/trezor-firmware
+	shallow = true

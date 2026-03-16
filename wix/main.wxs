@@ -1,0 +1,82 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  WiX v3 installer for trezor-pkcs11.
+
+  Installs:
+    %ProgramFiles%\trezor-pkcs11\trezor_pkcs11.dll
+    %ProgramFiles%\trezor-pkcs11\trezor-pkcs11.conf.example
+
+  The user points their PKCS#11 consumer (ssh-add, OpenSSL, etc.) at the DLL
+  path.  The config file goes in %APPDATA%\trezor-pkcs11\config — see the
+  bundled .conf.example for format documentation.
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <Product
+    Id='*'
+    Name='trezor-pkcs11'
+    UpgradeCode='3FA8E7C2-1D55-4A3B-9F1E-6C2D8B047A90'
+    Manufacturer='Arne Winter'
+    Language='1033'
+    Codepage='1252'
+    Version='!(bind.FileVersion.Dll)'>
+
+    <Package
+      Id='*'
+      Keywords='Installer'
+      Description='Trezor PKCS#11 library'
+      Manufacturer='Arne Winter'
+      InstallerVersion='450'
+      Languages='1033'
+      Compressed='yes'
+      InstallScope='perMachine'
+      SummaryCodepage='1252'/>
+
+    <MajorUpgrade
+      Schedule='afterInstallInitialize'
+      DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
+
+    <Media Id='1' Cabinet='main.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
+    <Property Id='DiskPrompt' Value='trezor-pkcs11 Installation'/>
+    <Property Id='ARPURLINFOABOUT' Value='https://github.com/arnemileswinter'/>
+    <Property Id='ARPHELPLINK' Value='https://github.com/arnemileswinter/trezor-pkcs11'/>
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFiles64Folder'>
+        <Directory Id='APPLICATIONFOLDER' Name='trezor-pkcs11'>
+
+          <Component Id='Dll' Guid='A1B2C3D4-E5F6-7890-ABCD-EF1234567890' Win64='yes'>
+            <File
+              Id='Dll'
+              Name='trezor_pkcs11.dll'
+              DiskId='1'
+              Source='target\release\trezor_pkcs11.dll'
+              KeyPath='yes'/>
+          </Component>
+
+          <Component Id='ConfExample' Guid='B2C3D4E5-F6A7-8901-BCDE-F12345678901' Win64='yes'>
+            <File
+              Id='ConfExample'
+              Name='trezor-pkcs11.conf.example'
+              DiskId='1'
+              Source='pkg\trezor-pkcs11.conf.example'/>
+          </Component>
+
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature
+      Id='Application'
+      Title='trezor-pkcs11'
+      Description='Installs the trezor-pkcs11 PKCS#11 library and example configuration.'
+      Level='1'
+      ConfigurableDirectory='APPLICATIONFOLDER'
+      AllowAdvertise='no'
+      Display='expand'
+      Absent='disallow'>
+      <ComponentRef Id='Dll'/>
+      <ComponentRef Id='ConfExample'/>
+    </Feature>
+
+  </Product>
+</Wix>

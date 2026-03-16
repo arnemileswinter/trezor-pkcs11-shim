@@ -1,0 +1,17 @@
+# trezor-pkcs11 configuration
+# Copy to ~/.config/trezor-pkcs11/config or /etc/trezor-pkcs11.conf
+# Each [slotN] section defines one PKCS#11 slot backed by a Trezor identity.
+#
+# uri   = SLIP-0013 gpg:// URI — same URI always derives the same key
+# label = human-readable token label shown by pkcs11-tool, ssh-add, etc.
+# curve = nist256p1 (default) or secp256k1
+
+[slot0]
+uri   = "gpg://ssh@myhomelab"
+label = "ssh-auth"
+curve = "nist256p1"
+
+[slot1]
+uri   = "gpg://commit@myhomelab"
+label = "git-signing"
+curve = "nist256p1"
