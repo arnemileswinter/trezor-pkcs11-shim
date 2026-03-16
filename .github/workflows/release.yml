@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Init required submodule (non-recursive)
+        run: git submodule update --init --depth 1 vendor/trezor-firmware
 
       - name: Install system dependencies
         run: sudo apt-get install -y libudev-dev libusb-1.0-0-dev protobuf-compiler
@@ -57,8 +57,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Init required submodule (non-recursive)
+        run: git submodule update --init --depth 1 vendor/trezor-firmware
 
       - name: Install protoc
         uses: arduino/setup-protoc@v3
