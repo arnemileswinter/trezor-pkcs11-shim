@@ -160,8 +160,9 @@ pub unsafe extern "C" fn C_GetFunctionList(pp: *mut *const CK_FUNCTION_LIST) -> 
 pub unsafe extern "C" fn C_Initialize(_args: *mut c_void) -> CK_RV {
     let Ok(mut guard) = STATE.lock() else { return CKR_GENERAL_ERROR };
     if guard.is_some() { return CKR_CRYPTOKI_ALREADY_INITIALIZED; }
+    let slots = config::load();
     *guard = Some(State {
-        slots: config::load(),
+        slots,
         pubkey_cache: HashMap::new(),
         sessions: HashMap::new(),
         next_session: 1,
@@ -379,8 +380,6 @@ pub unsafe extern "C" fn C_FindObjectsInit(
     let Ok(mut guard) = STATE.lock() else { return CKR_GENERAL_ERROR };
     let Some(state) = guard.as_mut() else { return CKR_CRYPTOKI_NOT_INITIALIZED };
     let Some(session) = state.sessions.get_mut(&handle) else { return CKR_SESSION_HANDLE_INVALID };
-    let slot_idx = session.slot_id as usize;
-
     let mut filter_class: Option<CK_OBJECT_CLASS> = None;
     if !template.is_null() && count > 0 {
         for attr in std::slice::from_raw_parts(template, count as usize) {
@@ -397,10 +396,16 @@ pub unsafe extern "C" fn C_FindObjectsInit(
         }
     }
 
+    // Slot 0 aggregates all keys so that OpenSSH builds which only open one
+    // session (always slot 0) can still enumerate every configured identity.
+    // Sessions for slot N > 0 return only that slot's objects, preserving
+    // isolation for callers that open specific slots (e.g. integration tests).
+    let slot_idx = session.slot_id as usize;
+    let range = if slot_idx == 0 { 0..state.slots.len() } else { slot_idx..slot_idx + 1 };
     let results = match filter_class {
-        Some(CKO_PUBLIC_KEY)  => vec![pubkey_handle(slot_idx)],
-        Some(CKO_PRIVATE_KEY) => vec![privkey_handle(slot_idx)],
-        None => vec![pubkey_handle(slot_idx), privkey_handle(slot_idx)],
+        Some(CKO_PUBLIC_KEY)  => range.map(pubkey_handle).collect(),
+        Some(CKO_PRIVATE_KEY) => range.map(privkey_handle).collect(),
+        None => range.flat_map(|i| [pubkey_handle(i), privkey_handle(i)]).collect(),
         _ => vec![],
     };
 

@@ -15,6 +15,39 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[cfg(windows)]
+const CSIDL_APPDATA: i32 = 0x001a;       // %APPDATA%  (roaming)
+#[cfg(windows)]
+const CSIDL_LOCAL_APPDATA: i32 = 0x001c; // %LOCALAPPDATA%
+
+/// Resolve a Windows shell CSIDL folder via `SHGetFolderPathW`.
+/// Works even when the corresponding environment variable is not set
+/// (e.g. when loaded as a DLL by a MinGW/MSYS2 process).
+#[cfg(windows)]
+fn shell_folder(csidl: i32) -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHGetFolderPathW(
+            hwnd:  *mut std::ffi::c_void,
+            csidl: i32,
+            token: *mut std::ffi::c_void,
+            flags: u32,
+            path:  *mut u16,
+        ) -> i32;
+    }
+
+    let mut buf = [0u16; 260];
+    let hr = unsafe {
+        SHGetFolderPathW(std::ptr::null_mut(), csidl, std::ptr::null_mut(), 0, buf.as_mut_ptr())
+    };
+    if hr != 0 { return None; }
+    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Some(PathBuf::from(OsString::from_wide(&buf[..len])))
+}
+
 #[derive(Debug, Clone)]
 pub struct SlotConfig {
     pub uri:   String,
@@ -94,31 +127,21 @@ fn config_candidates() -> Vec<PathBuf> {
     {
         let mut out = Vec::new();
 
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            if !appdata.trim().is_empty() {
-                let mut p = PathBuf::from(appdata);
-                p.push("trezor-pkcs11");
-                p.push("config");
+        // Prefer Win32 shell API over env vars — env vars may not be available
+        // when the DLL is loaded by a MinGW process (e.g. Git Bash ssh-agent).
+        for csidl in [CSIDL_APPDATA, CSIDL_LOCAL_APPDATA] {
+            if let Some(base) = shell_folder(csidl) {
+                let p = base.join("trezor-pkcs11").join("config");
                 out.push(p);
             }
         }
 
-        if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            if !local.trim().is_empty() {
-                let mut p = PathBuf::from(local);
-                p.push("trezor-pkcs11");
-                p.push("config");
-                out.push(p);
-            }
-        }
-
-        if let Ok(user_profile) = std::env::var("USERPROFILE") {
-            if !user_profile.trim().is_empty() {
-                let mut p = PathBuf::from(user_profile);
-                p.push(".config");
-                p.push("trezor-pkcs11");
-                p.push("config");
-                out.push(p);
+        // Env-var fallbacks for environments where shell API is unavailable.
+        for var in &["APPDATA", "LOCALAPPDATA"] {
+            if let Ok(val) = std::env::var(var) {
+                if !val.trim().is_empty() {
+                    out.push(PathBuf::from(val).join("trezor-pkcs11").join("config"));
+                }
             }
         }
 

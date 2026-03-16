@@ -41,6 +41,8 @@ const MSG_BUTTON_REQUEST:   u16 = 26;
 const MSG_BUTTON_ACK:       u16 = 27;
 const MSG_PASSPHRASE_REQUEST: u16 = 41;
 const MSG_PASSPHRASE_ACK:   u16 = 42;
+const MSG_INITIALIZE:       u16 = 0;
+const MSG_FEATURES:         u16 = 17;
 const MSG_SIGN_IDENTITY:    u16 = 53;
 const MSG_SIGNED_IDENTITY:  u16 = 54;
 
@@ -110,11 +112,11 @@ fn open_device() -> Result<Transport, TrezorError> {
                 if desc.vendor_id() != TREZOR_VID_T2 || desc.product_id() != TREZOR_PID_T2 {
                     continue;
                 }
-                let Ok(handle) = dev.open() else { continue };
-                // Detach any kernel driver on the bridge interface (usually none).
-                let _ = handle.set_auto_detach_kernel_driver(true);
-                if handle.claim_interface(USB_IFACE as u8).is_ok() {
-                    return Ok(Transport::Usb(handle));
+                if let Ok(handle) = dev.open() {
+                    let _ = handle.set_auto_detach_kernel_driver(true);
+                    if handle.claim_interface(USB_IFACE as u8).is_ok() {
+                        return Ok(Transport::Usb(handle));
+                    }
                 }
             }
         }
@@ -261,6 +263,14 @@ fn sign_identity_once(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<
     let _io_guard = DEVICE_IO_LOCK.lock()
         .map_err(|_| TrezorError::Protocol("device I/O lock poisoned".into()))?;
     let dev = open_device()?;
+    // Safe 3 (and newer firmware) requires an Initialize handshake on a fresh
+    // connection before accepting SignIdentity — send it and discard Features.
+    write_message(&dev, MSG_INITIALIZE, &[])?;
+    let (msg_type, _) = read_message(&dev)?;
+    if msg_type != MSG_FEATURES {
+        return Err(TrezorError::Protocol(format!(
+            "expected Features (17) after Initialize, got {}", msg_type)));
+    }
     send_sign_identity(&dev, req)
 }
 
