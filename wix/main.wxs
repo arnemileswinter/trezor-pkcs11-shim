@@ -18,7 +18,7 @@
     Manufacturer='Arne Winter'
     Language='1033'
     Codepage='1252'
-    Version='!(bind.FileVersion.Dll)'>
+    Version='$(var.ProductVersion)'>
 
     <Package
       Id='*'

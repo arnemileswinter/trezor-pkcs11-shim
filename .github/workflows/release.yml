@@ -77,10 +77,29 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      - name: Compute MSI product version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag.StartsWith('v')) {
+            $v = $tag.Substring(1)
+          } else {
+            $v = "0.1.0"
+          }
+
+          # MSI/WiX needs numeric dotted version (major.minor.build[.revision]).
+          $core = ($v -split '[-+]')[0]
+          if ($core -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Tag '$tag' does not map to a valid MSI version. Use vMAJOR.MINOR.PATCH[.REVISION]."
+          }
+
+          "MSI_PRODUCT_VERSION=$core" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using MSI product version: $core"
+
       - name: Build .msi installer
         run: |
           cargo install cargo-wix --locked
-          cargo wix --no-build --nocapture
+          cargo wix --no-build --nocapture -- -dProductVersion=${{ env.MSI_PRODUCT_VERSION }}
 
       - uses: actions/upload-artifact@v4
         with:
