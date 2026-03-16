@@ -18,7 +18,7 @@
     Manufacturer='Arne Winter'
     Language='1033'
     Codepage='1252'
-    Version='$(var.ProductVersion)'>
+    Version='$(env.MSI_PRODUCT_VERSION)'>
 
     <Package
       Id='*'

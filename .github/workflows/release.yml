@@ -100,8 +100,7 @@ jobs:
         shell: pwsh
         run: |
           cargo install cargo-wix --locked
-          $defineArg = "-dProductVersion=$env:MSI_PRODUCT_VERSION"
-          cargo wix --no-build --nocapture -- "$defineArg"
+          cargo wix --no-build --nocapture
 
       - uses: actions/upload-artifact@v4
         with:
