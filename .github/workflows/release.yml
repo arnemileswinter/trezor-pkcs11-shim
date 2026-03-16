@@ -97,9 +97,11 @@ jobs:
           Write-Host "Using MSI product version: $core"
 
       - name: Build .msi installer
+        shell: pwsh
         run: |
           cargo install cargo-wix --locked
-          cargo wix --no-build --nocapture -- -dProductVersion=${{ env.MSI_PRODUCT_VERSION }}
+          $defineArg = "-dProductVersion=$env:MSI_PRODUCT_VERSION"
+          cargo wix --no-build --nocapture -- "$defineArg"
 
       - uses: actions/upload-artifact@v4
         with:
