@@ -4,19 +4,21 @@ A PKCS#11 shared library (`libtrezor_pkcs11.so` / `trezor_pkcs11.dll`) that expo
 
 ## Supported curves
 
-| Curve | Aliases | Default |
-|-------|---------|---------|
-| nist256p1 | P-256, prime256v1 | yes |
-| secp256k1 | K-256 | no |
-| ed25519 | Ed25519 | no |
+| Curve | Aliases | Supported | Default in example config |
+|-------|---------|-----------|---------------------------|
+| nist256p1 | P-256, prime256v1 | yes | yes |
+| secp256k1 | K-256 | yes | no |
+| ed25519 | Ed25519 | yes | no |
+
+`Default in example config = no` means the curve is opt-in, not unsupported.
 
 ## Supported mechanisms
 
-| Mechanism | Input | Typical consumer |
-|-----------|-------|-----------------|
-| `CKM_ECDSA` | 32-byte pre-hashed digest | OpenSSH (`ssh-add`) |
-| `CKM_ECDSA_SHA256` | Raw data (hashed internally) | OpenSSL, git signing |
-| `CKM_EDDSA` | Raw data (Ed25519 hashes internally) | OpenSSH, PKCS#11 v3.0 consumers |
+| Mechanism | Input | Typical consumer | Supported |
+|-----------|-------|------------------|-----------|
+| `CKM_ECDSA` | 32-byte pre-hashed digest | OpenSSH (`ssh-add`) | yes |
+| `CKM_ECDSA_SHA256` | Raw data (hashed internally) | OpenSSL, git signing | yes |
+| `CKM_EDDSA` | Raw data (Ed25519 hashes internally) | OpenSSH, PKCS#11 v3.0 consumers | yes |
 
 ## Hardware support
 
@@ -198,6 +200,8 @@ pytest test_integration.py -v
 ```
 
 The integration tests open PKCS#11 sessions and perform real sign operations. Each signing call will require a button press on the Trezor. See `test_integration.py` for the full list of tests.
+
+When at least one slot is configured with `curve = "ed25519"`, the suite also exercises `CKM_EDDSA` and verifies Ed25519 signatures end-to-end.
 
 ## Security
 
