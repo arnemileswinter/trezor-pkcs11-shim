@@ -381,17 +381,22 @@ pub unsafe extern "C" fn C_FindObjectsInit(
     let Some(state) = guard.as_mut() else { return CKR_CRYPTOKI_NOT_INITIALIZED };
     let Some(session) = state.sessions.get_mut(&handle) else { return CKR_SESSION_HANDLE_INVALID };
     let mut filter_class: Option<CK_OBJECT_CLASS> = None;
+    let mut filter_id:    Option<usize>            = None;
     if !template.is_null() && count > 0 {
         for attr in std::slice::from_raw_parts(template, count as usize) {
-            if attr.attr_type == CKA_CLASS
-                && !attr.value.is_null()
-                && attr.value_len as usize == std::mem::size_of::<CK_ULONG>()
-            {
-                let bytes = std::slice::from_raw_parts(
-                    attr.value as *const u8,
-                    std::mem::size_of::<CK_ULONG>(),
-                );
-                filter_class = Some(CK_ULONG::from_ne_bytes(bytes.try_into().unwrap()));
+            if attr.value.is_null() { continue; }
+            match attr.attr_type {
+                CKA_CLASS if attr.value_len as usize == std::mem::size_of::<CK_ULONG>() => {
+                    let bytes = std::slice::from_raw_parts(
+                        attr.value as *const u8,
+                        std::mem::size_of::<CK_ULONG>(),
+                    );
+                    filter_class = Some(CK_ULONG::from_ne_bytes(bytes.try_into().unwrap()));
+                }
+                CKA_ID if attr.value_len == 1 => {
+                    filter_id = Some(*(attr.value as *const u8) as usize);
+                }
+                _ => {}
             }
         }
     }
@@ -401,11 +406,15 @@ pub unsafe extern "C" fn C_FindObjectsInit(
     // Sessions for slot N > 0 return only that slot's objects, preserving
     // isolation for callers that open specific slots (e.g. integration tests).
     let slot_idx = session.slot_id as usize;
-    let range = if slot_idx == 0 { 0..state.slots.len() } else { slot_idx..slot_idx + 1 };
+    let base_range = if slot_idx == 0 { 0..state.slots.len() } else { slot_idx..slot_idx + 1 };
+    // If the caller also specified a CKA_ID, narrow to that slot only.
+    let range: Vec<usize> = base_range
+        .filter(|i| filter_id.map_or(true, |id| *i == id))
+        .collect();
     let results = match filter_class {
-        Some(CKO_PUBLIC_KEY)  => range.map(pubkey_handle).collect(),
-        Some(CKO_PRIVATE_KEY) => range.map(privkey_handle).collect(),
-        None => range.flat_map(|i| [pubkey_handle(i), privkey_handle(i)]).collect(),
+        Some(CKO_PUBLIC_KEY)  => range.iter().map(|&i| pubkey_handle(i)).collect(),
+        Some(CKO_PRIVATE_KEY) => range.iter().map(|&i| privkey_handle(i)).collect(),
+        None => range.iter().flat_map(|&i| [pubkey_handle(i), privkey_handle(i)]).collect(),
         _ => vec![],
     };
 

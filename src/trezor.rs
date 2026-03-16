@@ -233,8 +233,9 @@ fn send_sign_identity(
                 write_message(dev, MSG_BUTTON_ACK, &ack.encode_to_vec())?;
             }
             MSG_PASSPHRASE_REQUEST => {
+                // Send empty passphrase directly — avoids an on-device prompt
+                // and keeps key derivation consistent with the standard wallet.
                 let ack = proto::common::PassphraseAck {
-                    passphrase: None,
                     on_device: Some(true),
                     ..Default::default()
                 };
@@ -260,16 +261,28 @@ fn is_invalid_session_error(err: &TrezorError) -> bool {
 }
 
 fn sign_identity_once(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
+    sign_identity_once_inner(req, false)
+}
+
+fn sign_identity_once_with_init(req: proto::crypto::SignIdentity) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
+    sign_identity_once_inner(req, true)
+}
+
+fn sign_identity_once_inner(req: proto::crypto::SignIdentity, initialize: bool) -> Result<(Vec<u8>, Vec<u8>), TrezorError> {
     let _io_guard = DEVICE_IO_LOCK.lock()
         .map_err(|_| TrezorError::Protocol("device I/O lock poisoned".into()))?;
     let dev = open_device()?;
-    // Safe 3 (and newer firmware) requires an Initialize handshake on a fresh
-    // connection before accepting SignIdentity — send it and discard Features.
-    write_message(&dev, MSG_INITIALIZE, &[])?;
-    let (msg_type, _) = read_message(&dev)?;
-    if msg_type != MSG_FEATURES {
-        return Err(TrezorError::Protocol(format!(
-            "expected Features (17) after Initialize, got {}", msg_type)));
+    if initialize {
+        // Device session is stale or missing — establish a fresh one.
+        // Only done on retry to avoid disrupting an existing session (e.g.
+        // one set up by Trezor Suite) which would change passphrase context
+        // and cause the wrong keys to be derived.
+        write_message(&dev, MSG_INITIALIZE, &[])?;
+        let (msg_type, _) = read_message(&dev)?;
+        if msg_type != MSG_FEATURES {
+            return Err(TrezorError::Protocol(format!(
+                "expected Features (17) after Initialize, got {}", msg_type)));
+        }
     }
     send_sign_identity(&dev, req)
 }
@@ -299,7 +312,7 @@ pub fn sign_identity(
 
     match sign_identity_once(req.clone()) {
         Ok(v) => Ok(v),
-        Err(e) if is_invalid_session_error(&e) => sign_identity_once(req),
+        Err(e) if is_invalid_session_error(&e) => sign_identity_once_with_init(req),
         Err(e) => Err(e),
     }
 }
@@ -323,7 +336,7 @@ pub fn sign_identity_raw(
 
     let (_pubkey, sig) = match sign_identity_once(req.clone()) {
         Ok(v) => v,
-        Err(e) if is_invalid_session_error(&e) => sign_identity_once(req)?,
+        Err(e) if is_invalid_session_error(&e) => sign_identity_once_with_init(req)?,
         Err(e) => return Err(e),
     };
     Ok(sig)
